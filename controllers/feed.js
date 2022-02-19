@@ -5,7 +5,7 @@ const { validationResult } = require("express-validator/check");
 
 const Post = require("../models/post");
 const User = require("../models/user");
-
+const io = require("../socket.js");
 exports.getPosts = async (req, res, next) => {
   try {
     const currentPage = req.query.page || 1;
@@ -13,9 +13,12 @@ exports.getPosts = async (req, res, next) => {
 
     let count = await Post.find().countDocuments();
     let posts = await Post.find()
+      .populate("creator")
       .sort({ _id: `descending` })
       .skip((currentPage - 1) * perPage)
       .limit(perPage);
+
+    console.log(posts);
     res.status(200).json({
       message: "Fetched posts successfully.",
       posts: posts,
@@ -52,10 +55,13 @@ exports.createPost = async (req, res, next) => {
       creator: req.userId,
     });
     await post.save();
-
     let user = await User.findById(req.userId);
     await user.posts.push(post._id);
-    await user.save();
+    await user.save(); 
+    io.getIo().emit("posts", {
+      action: "Create Post",
+      post: { ...post._doc, creator: { _id: req.userId, name: user.name } },
+    });
 
     res.status(201).json({
       message: "Post created successfully!",
@@ -108,14 +114,14 @@ exports.updatePost = async (req, res, next) => {
       error.statusCode = 422;
       throw error;
     }
-    let post = await Post.findById(postId);
+    let post = await Post.findById(postId).populate("creator");
 
     if (!post) {
       const error = new Error("Could not find post.");
       error.statusCode = 404;
       throw error;
     }
-    if (post.creator.toString() !== req.userId) {
+    if (post.creator._id.toString() !== req.userId) {
       const error = new Error("Not authorized!");
       error.statusCode = 403;
       throw error;
@@ -127,7 +133,7 @@ exports.updatePost = async (req, res, next) => {
     post.imageUrl = imageUrl;
     post.content = content;
     let result = await post.save();
-
+    io.getIo().emit("posts", { action: "update", post: result });
     res.status(200).json({ message: "Post updated!", post: result });
   } catch (err) {
     if (!err.statusCode) {
@@ -161,7 +167,7 @@ exports.deletePost = async (req, res, next) => {
 
     user.posts.pull(postId);
     await user.save();
-
+    io.getIo().emit("posts", { action: `hapus`, post: postId });
     res.status(200).json({ message: "Deleted post." });
   } catch (err) {
     if (!err.statusCode) {

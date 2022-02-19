@@ -32,8 +32,9 @@ const fileFilter = (req, file, cb) => {
 };
 
 // app.use(bodyParser.urlencoded()); // x-www-form-urlencoded <form>
-app.use(bodyParser.json()); // application/json
 app.use(cors());
+
+app.use(bodyParser.json()); // application/json
 app.use(
   multer({ storage: fileStorage, fileFilter: fileFilter }).single("image")
 );
@@ -62,9 +63,18 @@ app.use((error, req, res, next) => {
 
 mongoose
   .connect(
-    "mongodb+srv://runatyudi:kawasanrokok1998@cluster0.oaqmd.mongodb.net/restApi?retryWrites=true&w=majority"
+    "mongodb+srv://runatyudi:kawasanrokok1998@cluster0.oaqmd.mongodb.net/restApi?retryWrites=true& w=majority"
   )
   .then((result) => {
-    app.listen(8080);
+    let server = app.listen(8080);
+    let io = require("./socket.js").init(server, {
+      cors: {
+        origin: "http://localhost:3000",
+        methods: ["GET", "POST", "PUT", "DELETE"],
+      },
+    });
+    io.on("connection", (socket) => {
+      console.log(`konek dari froend end`);
+    });
   })
   .catch((err) => console.log(err));
